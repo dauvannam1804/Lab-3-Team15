@@ -1,0 +1,50 @@
+{
+  "flights": [
+    {
+      "flight_id": "VN213",
+      "airline": "Vietnam Airlines",
+      "origin": "HAN",
+      "destination": "SGN",
+      "departure_time": "2026-04-10T08:00:00",
+      "price_usd": 120,
+      "available_seats": 5
+    },
+    {
+      "flight_id": "VJ122",
+      "airline": "Vietjet Air",
+      "origin": "HAN",
+      "destination": "SGN",
+      "departure_time": "2026-04-10T10:30:00",
+      "price_usd": 75,
+      "available_seats": 0
+    },
+    {
+      "flight_id": "QH245",
+      "airline": "Bamboo Airways",
+      "origin": "HAN",
+      "destination": "DAD",
+      "departure_time": "2026-04-10T09:15:00",
+      "price_usd": 95,
+      "available_seats": 3
+    }
+  ],
+  "weather": {
+    "SGN": {
+      "condition": "Sunny",
+      "temperature_c": 32
+    },
+    "HAN": {
+      "condition": "Rainy",
+      "temperature_c": 22
+    },
+    "DAD": {
+      "condition": "Cloudy",
+      "temperature_c": 28
+    }
+  },
+  "policies": {
+    "Vietnam Airlines": "Hành lý xách tay 12kg, ký gửi 23kg.",
+    "Vietjet Air": "Hành lý xách tay 7kg, không bao gồm ký gửi.",
+    "Bamboo Airways": "Hành lý xách tay 7kg, ký gửi 20kg."
+  }
+}
