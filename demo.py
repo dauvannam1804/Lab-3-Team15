@@ -49,9 +49,10 @@ st.set_page_config(page_title="ReAct Agent Demo", page_icon="✈️", layout="wi
 
 st.markdown("""
 <style>
+/* CSS cho Metrics Container */
 [data-testid="stMetric"] { 
     background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); 
-    padding: 15px 20px; 
+    padding: 10px 15px; /* Giảm padding để tiết kiệm diện tích */
     border-radius: 12px; 
     box-shadow: 0 4px 15px rgba(0,250,154,0.15); 
     border-left: 6px solid #00fa9a; 
@@ -59,25 +60,27 @@ st.markdown("""
     border-top: 1px solid #333;
     border-bottom: 1px solid #333;
 }
-[data-testid="stMetricLabel"] > div > div > p {
+/* CSS làm nổ bần bật các chữ TTFT (s), Latency (s), Tokens */
+[data-testid="stMetricLabel"] * {
     color: #ffb703 !important; 
-    font-size: 17px !important; 
-    font-weight: 800 !important;
+    font-size: 18px !important; 
+    font-weight: 900 !important;
     text-transform: uppercase;
+    text-shadow: 0 0 5px rgba(255, 183, 3, 0.6);
 }
-[data-testid="stMetricValue"] > div {
+[data-testid="stMetricValue"] * {
     color: #00ffcc !important; 
-    font-size: 32px !important;
+    font-size: 26px !important;
     font-weight: 900 !important;
     text-shadow: 0 0 10px rgba(0, 255, 204, 0.4);
 }
-.output-box { background: #0d0d0d; padding: 20px; border-radius: 10px; min-height: 200px; max-height: 400px; overflow-y: auto; font-family: 'Consolas', monospace; font-size: 15px; line-height: 1.6; color: #f1f1f1; border: 1px solid #333; border-top: 3px solid #e63946;}
+.output-box { background: #0d0d0d; padding: 20px; border-radius: 10px; font-family: 'Consolas', monospace; font-size: 15px; line-height: 1.6; color: #f1f1f1; border: 1px solid #333; border-top: 3px solid #e63946;}
 .status-success { color: #00fa9a; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("✈️ Flight Booking Agent vs Baseline Chatbot")
-st.markdown("Tiến hành chạy mô phỏng nghiệm thu **Time-to-First-Token (TTFT)**, **Latency**, và **Tokens Usage** giữa Chatbot thông thường và ReAct Agent.")
+st.title("✈️ Continuous Flight Booking Agent vs Baseline Chatbot")
+st.markdown("Kiểm thử nghiệm thu trực quan song song. Nhập câu hỏi bên dưới để bắt đầu luồng hội thoại!")
 
 # -------------------------------------------------------------------------------------
 # Helper execution
@@ -100,14 +103,11 @@ def run_baseline_stream(llm, prompt):
         
     total_latency = time.time() - start_time
     
-    # Đoán token dở chừng (Vì stream API không trả về usage chính xác trong Gemini Provider bản đơn giản của Lab)
-    # Ta sẽ estimate prompt/completion length = chars / 4
     prompt_tokens = len(prompt) // 4
     comp_tokens = len(full_text) // 4 
     total_tokens = prompt_tokens + comp_tokens
     
     return full_text, ttft, total_latency, total_tokens
-
 
 def run_agent(agent, prompt):
     mem_logger.clear()
@@ -116,17 +116,10 @@ def run_agent(agent, prompt):
     final_answer = agent.run(prompt)
     total_latency = time.time() - t0
     
-    # Tính TTFT: Thời điểm bắt được sự kiện LLM_RESPONSE đầu tiên
     first_llm_event = next((e for e in mem_logger.events if e["event"] == "LLM_RESPONSE"), None)
-    if first_llm_event:
-        ttft = first_llm_event["timestamp"] - t0
-    else:
-        ttft = total_latency
+    ttft = (first_llm_event["timestamp"] - t0) if first_llm_event else total_latency
         
-    # Tính tổng Tokens
-    total_tokens = 0
-    prompt_tokens = 0
-    comp_tokens = 0
+    total_tokens, prompt_tokens, comp_tokens = 0, 0, 0
     for e in mem_logger.events:
         if e["event"] == "LLM_RESPONSE":
             usage = e["data"].get("usage", {})
@@ -147,44 +140,52 @@ if not api_key:
     
 llm = GeminiProvider(model_name="gemini-2.5-flash", api_key=api_key)
 tools = get_tools()
-err = None  # Or remove err parameter entirely
 
-user_input = st.text_input("Gõ câu hỏi để test nghiệm thu hệ thống:", placeholder="VD: Tìm giúp mình chuyến bay từ Hà Nội đi Đà Nẵng...")
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
-if st.button("🚀 Chạy So Sánh", type="primary") and user_input:
-    col1, col2 = st.columns(2)
+# Hiển thị lịch sử Chat liên tục
+for i, turn in enumerate(st.session_state.chat_history):
+    st.chat_message("user", avatar="🧑‍💻").write(turn["user"])
     
-    # ==========================
-    # CỘT 1: BASELINE CHATBOT
-    # ==========================
-    with col1:
-        st.subheader("🤖 Baseline Chatbot")
-        with st.spinner("Đang chạy trực tiếp không qua quy trình Thought-Action..."):
-            base_ans, base_ttft, base_lat, base_toks = run_baseline_stream(llm, user_input)
-            
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("##### 🤖 Baseline Chatbot Response")
         m1, m2, m3 = st.columns(3)
-        m1.metric("TTFT (s)", f"{base_ttft:.2f}")
-        m2.metric("Latency (s)", f"{base_lat:.2f}")
-        m3.metric("Tokens", base_toks)
+        m1.metric("TTFT (s)", f"{turn['b_ttft']:.2f}")
+        m2.metric("Latency (s)", f"{turn['b_lat']:.2f}")
+        m3.metric("Tokens", turn['b_toks'])
+        st.markdown(f"<div class='output-box'>{turn['b_ans']}</div><br>", unsafe_allow_html=True)
         
-        st.markdown(f"<div class='output-box'>{base_ans}</div>", unsafe_allow_html=True)
-        
-    # ==========================
-    # CỘT 2: REACT AGENT
-    # ==========================
-    with col2:
-        st.subheader("🧠 ReAct Agent")
-        
-        if err:
-            st.error(err)
-        else:
-            with st.spinner("Đang tư duy và sử dụng Tool định tuyến (ReAct Loop)..."):
-                agent = ReActAgent(llm=llm, tools=tools, max_steps=5)
-                ag_ans, ag_ttft, ag_lat, ag_toks = run_agent(agent, user_input)
-                
-            a1, a2, a3 = st.columns(3)
-            a1.metric("TTFT (s)", f"{ag_ttft:.2f}")
-            a2.metric("Latency (s)", f"{ag_lat:.2f}")
-            a3.metric("Tokens", ag_toks)
+    with c2:
+        st.markdown("##### 🧠 ReAct Agent Response")
+        a1, a2, a3 = st.columns(3)
+        a1.metric("TTFT (s)", f"{turn['a_ttft']:.2f}")
+        a2.metric("Latency (s)", f"{turn['a_lat']:.2f}")
+        a3.metric("Tokens", turn['a_toks'])
+        st.markdown(f"<div class='output-box'>{turn['a_ans']}</div><br>", unsafe_allow_html=True)
+
+# Khung input liên tục ở đáy màn hình
+if prompt := st.chat_input("VD: Tìm giúp mình chuyến bay từ Hà Nội đi Đà Nẵng..."):
+    # Render user message ngay lập tức
+    st.chat_message("user", avatar="🧑‍💻").write(prompt)
+    
+    # Chuẩn bị block chờ
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("##### 🤖 Baseline Chatbot Response")
+        with st.spinner("Đang tư duy trực tiếp..."):
+            b_ans, b_ttft, b_lat, b_toks = run_baseline_stream(llm, prompt)
+    with c2:
+        st.markdown("##### 🧠 ReAct Agent Response")
+        with st.spinner("Đang duyệt thought-action loop..."):
+            agent = ReActAgent(llm=llm, tools=tools, max_steps=5)
+            a_ans, a_ttft, a_lat, a_toks = run_agent(agent, prompt)
             
-            st.markdown(f"<div class='output-box'>{ag_ans}</div>", unsafe_allow_html=True)
+    # Lưu vào session_state (tự động rerun và render lại)
+    st.session_state.chat_history.append({
+        "user": prompt,
+        "b_ans": b_ans, "b_ttft": b_ttft, "b_lat": b_lat, "b_toks": b_toks,
+        "a_ans": a_ans, "a_ttft": a_ttft, "a_lat": a_lat, "a_toks": a_toks
+    })
+    st.rerun()
