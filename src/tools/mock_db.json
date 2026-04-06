@@ -21,9 +21,39 @@
     {
       "flight_id": "QH304",
       "airline": "Bamboo Airways",
+<<<<<<< HEAD
+<<<<<<< HEAD
+      "origin": "HAN",
+      "destination": "SGN",
+      "departure_time": "2026-04-10T14:15:00",
+      "price_usd": 95,
+      "available_seats": 5
+    },
+    {
+      "flight_id": "VN345",
+      "airline": "Vietnam Airlines",
+      "origin": "HAN",
+      "destination": "DAD",
+      "departure_time": "2026-04-11T09:15:00",
+      "price_usd": 150,
+      "available_seats": 3
+    },
+    {
+      "flight_id": "VJ567",
+      "airline": "Vietjet Air",
+      "origin": "HAN",
+      "destination": "DAD",
+      "departure_time": "2026-04-11T13:45:00",
+=======
       "origin": "DAD",
       "destination": "HAN",
       "departure_time": "2026-04-12T14:15:00",
+>>>>>>> 6a63230f4bdc83f001bfe87a1d4e68ff3e416de9
+=======
+      "origin": "DAD",
+      "destination": "HAN",
+      "departure_time": "2026-04-12T14:15:00",
+>>>>>>> f802a557054a2e097ec44a6ff883d60c0ba2994c
       "price_usd": 90,
       "available_seats": 12
     },
@@ -144,5 +174,29 @@
     "Korean Air": "Hành lý xách tay 10kg, ký gửi 1 kiện 23kg.",
     "Cathay Pacific": "Hành lý xách tay 7kg, miễn phí 1 kiện ký gửi 23kg."
   },
+<<<<<<< HEAD
+<<<<<<< HEAD
+  "bookings": {
+    "IUFHGE": {
+      "flight_id": "QH501",
+      "passenger_name": "Nguyen Van A",
+      "contact_info": "0901234567"
+    },
+    "9I5SGJ": {
+      "flight_id": "QH501",
+      "passenger_name": "Le Thi C",
+      "contact_info": "0911111111"
+    },
+    "83U0W4": {
+      "flight_id": "QH501",
+      "passenger_name": "Tran Thi B",
+      "contact_info": "0977777777"
+    }
+  }
+=======
   "bookings": {}
+>>>>>>> 6a63230f4bdc83f001bfe87a1d4e68ff3e416de9
+=======
+  "bookings": {}
+>>>>>>> f802a557054a2e097ec44a6ff883d60c0ba2994c
 }
