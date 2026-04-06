@@ -23,12 +23,17 @@ class ReActAgent:
     # ------------------------------------------------------------------
     def get_system_prompt(self) -> str:
         """Build a detailed system prompt that defines the ReAct format and lists tools."""
+        import datetime
+        current_date = datetime.datetime.now().strftime('%Y-%m-%d')
+        
         tool_descriptions = "\n".join(
             [f"  - {t['name']}: {t['description']}" for t in self.tools]
         )
         tool_names = ", ".join([t["name"] for t in self.tools])
 
         return f"""You are an intelligent AI assistant specialised in flight booking.
+Today is {current_date}. Keep this in mind when the user asks for flights using relative terms like "today", "tomorrow", "this year", or provides dates without a year.
+
 You have access to the following tools:
 {tool_descriptions}
 

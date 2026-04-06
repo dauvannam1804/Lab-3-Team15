@@ -95,7 +95,9 @@ def run_baseline_stream(llm, prompt):
     start_time = time.time()
     ttft = 0
     full_text = ""
-    system_prompt = "You are a helpful flight booking assistant. STRICT RULE: You ONLY answer questions about flights, bookings, baggage, and weather. If the user asks out-of-scope questions, immediately answer ONLY with: 'Xin lỗi, tôi chỉ là trợ lý ảo hỗ trợ chuyến bay. Tôi không có quyền giải đáp vấn đề ngoài lề.'"
+    import datetime
+    current_date = datetime.datetime.now().strftime('%Y-%m-%d')
+    system_prompt = f"You are a helpful flight booking assistant. Today is {current_date}. STRICT RULE: You ONLY answer questions about flights, bookings, baggage, and weather. If the user asks out-of-scope questions, immediately answer ONLY with: 'Xin lỗi, tôi chỉ là trợ lý ảo hỗ trợ chuyến bay. Tôi không có quyền giải đáp vấn đề ngoài lề.'"
     
     stream_gen = llm.stream(f"User: {prompt}", system_prompt=system_prompt)
     
