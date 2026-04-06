@@ -33,45 +33,51 @@ DELAY_BETWEEN_CASES = 20            # seconds – avoids rate-limit between test
 MAX_RETRIES = 3                     # retry on 429 / quota errors
 
 # ──────────────────────────────────────────────
-# 5 Test Cases – grounded in mock_db.json
+# Test Cases
 # ──────────────────────────────────────────────
-#
-# DB snapshot (key data):
-#  HAN→SGN 2026-04-10: VN213($120,5 seats) | VJ122($75,0 seats) | QH501($95,7 seats)
-#  HAN→DAD 2026-04-11: VN345($150,3 seats) | VJ567($90,2 seats)
-#  HAN→PQC 2026-04-13: VN890($200,6 seats)
-#  SGN→HAN 2026-04-12: VN678($115,4 seats) | QH302($102,1 seat)
-#  Weather : SGN=Sunny32° | HAN=Rainy22° | DAD=Cloudy28° | PQC=Sunny34°
-#  Policies: VN=12kg carry-on+23kg check | VJ=7kg no check | QH=10kg+20kg
+# DB: HAN→SGN 2026-04-10: VN213($120,5 seats) | VJ122($75,0 seats) | QH501($95,6 seats)
+#     HAN→DAD 2026-04-11: VN345($150,3 seats) | VJ567($90,2 seats)
+#     Weather: SGN=Sunny32° | HAN=Rainy22° | DAD=Cloudy28° | PQC=Sunny34°
+#     Policies: Vietnam Airlines=12kg+23kg | Vietjet=7kg no check | Bamboo=10kg+20kg
 TEST_CASES = [
     {
         "id": 1,
-        "label": "TC1 – Search flights (1 tool call)",
-        # Expected: Agent calls search_flights(HAN,SGN,2026-04-10)
-        # → returns VN213 $120, VJ122 $75 (hết chỗ), QH501 $95
-        "prompt": (
-            "Gợi ý cho tôi địa điểm du lịch Đà NẴNG "
-        ),
+        "label": "TC1 – Out-of-scope guardrail (tourism question)",
+        # Both Baseline & Agent should reject immediately (0 LLM tokens)
+        "prompt": "Gợi ý cho tôi địa điểm du lịch Đà Nẵng.",
     },
     {
         "id": 2,
-        "label": "TC2 – Book cheapest available (2 tool calls: search → book)",
-        # Expected:
-        #   Step1: search_flights(HAN,SGN,2026-04-10) → VJ122 hết chỗ nên bỏ qua
-        #   Step2: book_flight(QH501, "Le Thi C", "0911111111")  ← $95, còn 7 chỗ
-        #   → returns PNR code
-        "prompt": (
-            "Các sinh tồn ở Hà Nội "
-        ),
+        "label": "TC2 – Latency comparison: simple 1-tool query",
+        # ★ LATENCY TEST: both Baseline and Agent must answer this.
+        # Baseline: 1 LLM call, may hallucinate prices.
+        # Agent   : 1 LLM call + search_flights() tool + 1 LLM call → accurate.
+        # Compare: Baseline latency (fast, wrong) vs Agent latency (slower, correct).
+        "prompt": "Có chuyến bay nào từ Hà Nội đi Sài Gòn vào ngày 2026-04-10 không? Liệt kê giá và số ghế trống.",
     },
     {
         "id": 3,
-        "label": "TC3 – Failure handling: book a sold-out flight",
-        # Expected: book_flight(VJ122, ...) → Error "no available seats"
-        # Agent should NOT hallucinate a PNR, must tell user flight is full.
+        "label": "TC3 – Multi-step: search then book cheapest available",
+        # Agent: search_flights → pick cheapest with seats (QH501 $95) → book_flight
+        # Baseline: cannot actually book, will hallucinate PNR.
         "prompt": (
-            "các món ăn ở HCM"
+            "Tìm chuyến bay rẻ nhất còn chỗ từ HAN đến SGN ngày 2026-04-10 "
+            "rồi đặt vé cho hành khách 'Tran Thi B', liên hệ '0977777777'."
         ),
+    },
+    {
+        "id": 4,
+        "label": "TC4 – Failure handling: book sold-out flight VJ122",
+        # Agent: book_flight(VJ122) → Error 'no available seats' → tells user
+        # Baseline: likely hallucinates a PNR.
+        "prompt": "Đặt vé chuyến VJ122 cho hành khách 'Pham Van D', liên hệ '0922222222'.",
+    },
+    {
+        "id": 5,
+        "label": "TC5 – Baggage policy lookup (1 tool)",
+        # Agent: get_baggage_policy('Bamboo Airways') → exact policy from DB
+        # Baseline: generic answer, may be wrong.
+        "prompt": "Bay Bamboo Airways được mang bao nhiêu kg hành lý xách tay và ký gửi?",
     },
 ]
 
@@ -161,40 +167,68 @@ def main():
     print(f"  ⚠  Free-tier: sleeping {DELAY_BETWEEN_CALLS}s between calls to avoid 429")
     print(f"{'═'*64}")
 
+    latency_report = []   # collect rows for summary table
+
     for idx, tc in enumerate(TEST_CASES):
         print_section(f"Test Case {tc['id']}: {tc['label']}")
         print(f"📝 Prompt: {tc['prompt']}\n")
 
-        # ── Baseline Chatbot ────────────────────────────────────────
-        print("🤖 [Baseline Chatbot]  (plain LLM – no tools)")
-        baseline_ans = safe_call(run_baseline_chatbot, llm, tc["prompt"])
-        print(f"   → {baseline_ans}\n")
+        out_of_scope = not is_flight_related(tc["prompt"])
 
-        # ── Skip sleep + Agent if out of scope ──────────────────────
-        if not is_flight_related(tc["prompt"]):
-            print("🚫 [ReAct Agent]  Guardrail triggered – skipping (0 tokens).")
-            print(f"   → {OUT_OF_SCOPE_MSG}\n")
+        # Baseline Chatbot
+        print("🤖 [Baseline Chatbot]  (plain LLM – no tools)")
+        t0 = time.time()
+        baseline_ans = safe_call(run_baseline_chatbot, llm, tc["prompt"])
+        baseline_ms = int((time.time() - t0) * 1000)
+        print(f"   → {baseline_ans}")
+        print(f"   ⏱  Latency: {baseline_ms} ms\n")
+
+        # Guardrail short-circuit
+        if out_of_scope:
+            print("🚫 [ReAct Agent]  Guardrail triggered – skipping (0 tokens, ~0 ms).")
+            print(f"   → {OUT_OF_SCOPE_MSG}")
+            print(f"   ⏱  Latency: 0 ms  (no LLM call)\n")
+            latency_report.append((tc["id"], tc["label"], baseline_ms, 0, "GUARDRAIL"))
             if idx < len(TEST_CASES) - 1:
-                print(f"   ⏳  Sleeping {DELAY_BETWEEN_CASES}s before next test case …")
+                print(f"   ⏳  Sleeping {DELAY_BETWEEN_CASES}s …")
                 time.sleep(DELAY_BETWEEN_CASES)
             continue
 
-        # Pause between baseline and agent to stay under rate limit
+        # Sleep to avoid rate limit
         print(f"   ⏳  Sleeping {DELAY_BETWEEN_CALLS}s before Agent call …")
         time.sleep(DELAY_BETWEEN_CALLS)
 
-        # ── ReAct Agent ─────────────────────────────────────────────
+        # ReAct Agent
         print("🧠 [ReAct Agent]  (Thought → Action → Observation loop)")
+        t0 = time.time()
         agent_ans = safe_call(run_react_agent, agent, tc["prompt"])
-        print(f"   → {agent_ans}\n")
+        agent_ms = int((time.time() - t0) * 1000)
+        print(f"   → {agent_ans}")
+        print(f"   ⏱  Latency: {agent_ms} ms\n")
 
-        # Pause between test cases (skip after last one)
+        latency_report.append((tc["id"], tc["label"], baseline_ms, agent_ms, "OK"))
+
         if idx < len(TEST_CASES) - 1:
-            print(f"   ⏳  Sleeping {DELAY_BETWEEN_CASES}s before next test case …")
+            print(f"   ⏳  Sleeping {DELAY_BETWEEN_CASES}s …")
             time.sleep(DELAY_BETWEEN_CASES)
 
+    # Latency Summary Table
     print(f"\n{'═'*64}")
-    print("  ✅  All test cases completed. Check logs/ for trace data.")
+    print("  📊  LATENCY COMPARISON SUMMARY")
+    print(f"{'─'*64}")
+    print(f"  {'TC':<4} {'Baseline':>10} {'Agent':>10}  Delta  Note")
+    print(f"{'─'*64}")
+    for row in latency_report:
+        tc_id, label, b_ms, a_ms, status = row
+        short = (label[:32] + "…") if len(label) > 32 else label
+        if status == "GUARDRAIL":
+            print(f"  TC{tc_id:<3} {b_ms:>8} ms {'0 ms':>10}  {'N/A':>6}  Guardrail – {short}")
+        else:
+            delta = a_ms - b_ms
+            sign = "+" if delta >= 0 else ""
+            print(f"  TC{tc_id:<3} {b_ms:>8} ms {a_ms:>8} ms  {sign}{delta:>5} ms  {short}")
+    print(f"{'═'*64}")
+    print("  ✅  Done. Check logs/ for full trace data.")
     print(f"{'═'*64}\n")
 
 

@@ -25,7 +25,7 @@
       "destination": "SGN",
       "departure_time": "2026-04-10T14:15:00",
       "price_usd": 95,
-      "available_seats": 6
+      "available_seats": 5
     },
     {
       "flight_id": "VN345",
@@ -129,6 +129,11 @@
       "flight_id": "QH501",
       "passenger_name": "Le Thi C",
       "contact_info": "0911111111"
+    },
+    "83U0W4": {
+      "flight_id": "QH501",
+      "passenger_name": "Tran Thi B",
+      "contact_info": "0977777777"
     }
   }
 }
