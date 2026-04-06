@@ -6,10 +6,30 @@ from src.core.llm_provider import LLMProvider
 from src.telemetry.logger import logger
 
 
+# ------------------------------------------------------------------
+# Guardrail: flight-domain keywords (Vietnamese + English + airport codes)
+# Only topics matching at least one keyword will be processed by the agent.
+# ------------------------------------------------------------------
+_FLIGHT_KEYWORDS = [
+    # Vietnamese
+    "bay", "vé", "chuyến", "đặt vé", "sân bay", "hành lý", "hãng hàng không",
+    "khởi hành", "điểm đến", "điểm đi", "xuất phát", "thời tiết", "thời gian bay",
+    "ký gửi", "xách tay", "booking", "pnr", "giá vé", "chỗ ngồi", "ghế",
+    # English
+    "flight", "ticket", "airline", "airport", "baggage", "luggage", "book",
+    "departure", "destination", "origin", "weather", "seat", "price",
+    # Airport codes in database
+    "han", "sgn", "dad", "pqc", "hph",
+    # Airlines in database
+    "vietnam airlines", "vietjet", "bamboo",
+    # Flight IDs pattern (e.g. VN213, VJ122, QH501)
+]
+
+
 class ReActAgent:
     """
     ReAct Agent (Reasoning + Acting) that follows the Thought-Action-Observation loop.
-    Supports any LLMProvider (Gemini, OpenAI, Local).
+    Includes a topic Guardrail to reject off-topic questions without spending tokens.
     """
 
     def __init__(self, llm: LLMProvider, tools: List[Dict[str, Any]], max_steps: int = 7):
@@ -52,10 +72,35 @@ Rules:
 """
 
     # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Guardrail Check
+    # ------------------------------------------------------------------
+    def _is_flight_related(self, text: str) -> bool:
+        """Keyword-based topic filter. Returns True if the query is flight-domain."""
+        lowered = text.lower()
+        # Check flight ID pattern e.g. VN213, VJ122, QH501
+        if re.search(r"\b(vn|vj|qh|pa)\d{2,4}\b", lowered):
+            return True
+        return any(kw in lowered for kw in _FLIGHT_KEYWORDS)
+
+    # ------------------------------------------------------------------
     # Main ReAct Loop
     # ------------------------------------------------------------------
     def run(self, user_input: str) -> str:
         """Execute the Thought → Action → Observation loop until Final Answer or max_steps."""
+
+        # ── Guardrail: reject off-topic questions immediately (0 tokens spent) ──
+        if not self._is_flight_related(user_input):
+            logger.log_event("GUARDRAIL_REJECTED", {
+                "input": user_input,
+                "reason": "out_of_scope",
+            })
+            return (
+                "Xin lỗi, tôi chỉ hỗ trợ các yêu cầu liên quan đến đặt vé máy bay, "
+                "tra cứu chuyến bay, thời tiết điểm đến và quy định hành lý. "
+                "Vui lòng đặt câu hỏi phù hợp với dịch vụ này."
+            )
+
         logger.log_event("AGENT_START", {"input": user_input, "model": self.llm.model_name})
 
         # Build a running transcript; append each LLM turn + Observation

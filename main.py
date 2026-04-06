@@ -11,6 +11,7 @@ Usage:
 
 import os
 import sys
+import re
 import time
 
 # Make sure src/ is importable when running from the project root
@@ -20,7 +21,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from src.core.gemini_provider import GeminiProvider
-from src.agent.agent import ReActAgent
+from src.agent.agent import ReActAgent, _FLIGHT_KEYWORDS
 from src.tools.flight_tools import FLIGHT_TOOLS
 
 # ──────────────────────────────────────────────
@@ -49,8 +50,7 @@ TEST_CASES = [
         # Expected: Agent calls search_flights(HAN,SGN,2026-04-10)
         # → returns VN213 $120, VJ122 $75 (hết chỗ), QH501 $95
         "prompt": (
-            "Cho tôi xem danh sách chuyến bay từ Hà Nội (HAN) đến Sài Gòn (SGN) "
-            "vào ngày 2026-04-10."
+            "Gợi ý cho tôi địa điểm du lịch Đà NẴNG "
         ),
     },
     {
@@ -61,8 +61,7 @@ TEST_CASES = [
         #   Step2: book_flight(QH501, "Le Thi C", "0911111111")  ← $95, còn 7 chỗ
         #   → returns PNR code
         "prompt": (
-            "Tìm chuyến bay rẻ nhất còn chỗ từ HAN đến SGN ngày 2026-04-10, "
-            "rồi đặt vé cho hành khách 'Le Thi C', liên hệ '0911111111'."
+            "Các sinh tồn ở Hà Nội "
         ),
     },
     {
@@ -71,30 +70,7 @@ TEST_CASES = [
         # Expected: book_flight(VJ122, ...) → Error "no available seats"
         # Agent should NOT hallucinate a PNR, must tell user flight is full.
         "prompt": (
-            "Đặt vé chuyến VJ122 (Vietjet Air, HAN→SGN 10:30) "
-            "cho hành khách 'Pham Van D', liên hệ '0922222222'."
-        ),
-    },
-    {
-        "id": 4,
-        "label": "TC4 – Baggage policy lookup (1 tool call)",
-        # Expected: get_baggage_policy("Bamboo Airways")
-        # → "Hành lý xách tay 10 kg, ký gửi miễn phí 20 kg."
-        "prompt": (
-            "Tôi sắp bay Bamboo Airways. "
-            "Cho tôi biết quy định hành lý xách tay và ký gửi của hãng này."
-        ),
-    },
-    {
-        "id": 5,
-        "label": "TC5 – Weather + search combo (bonus: 2 tools)",
-        # Expected:
-        #   Step1: get_weather("DAD") → Cloudy 28°C
-        #   Step2: search_flights(HAN,DAD,2026-04-11) → VN345 & VJ567
-        #   Agent summarises weather AND available flights together.
-        "prompt": (
-            "Tôi muốn bay từ Hà Nội (HAN) đến Đà Nẵng (DAD) ngày 2026-04-11. "
-            "Thời tiết Đà Nẵng hôm đó thế nào và có những chuyến bay nào?"
+            "các món ăn ở HCM"
         ),
     },
 ]
@@ -137,8 +113,28 @@ def safe_call(fn, *args, retries: int = MAX_RETRIES) -> str:
     return "[ERROR] Max retries exceeded due to rate limiting."
 
 
+# ──────────────────────────────────────────────
+# Guardrail helper (shared with agent.py)
+# ──────────────────────────────────────────────
+OUT_OF_SCOPE_MSG = (
+    "Xin lỗi, tôi chỉ hỗ trợ các yêu cầu liên quan đến đặt vé máy bay, "
+    "tra cứu chuyến bay, thời tiết điểm đến và quy định hành lý. "
+    "Vui lòng đặt câu hỏi phù hợp với dịch vụ này."
+)
+
+def is_flight_related(text: str) -> bool:
+    """Reuse the same keyword list as agent.py to keep behaviour consistent."""
+    lowered = text.lower()
+    if re.search(r"\b(vn|vj|qh|pa)\d{2,4}\b", lowered):
+        return True
+    return any(kw in lowered for kw in _FLIGHT_KEYWORDS)
+
+
 def run_baseline_chatbot(llm: GeminiProvider, prompt: str) -> str:
     """Plain LLM call with NO tools – simulates a naive chatbot."""
+    # Apply same guardrail so Baseline also rejects off-topic questions
+    if not is_flight_related(prompt):
+        return OUT_OF_SCOPE_MSG
     system = "You are a helpful flight booking assistant. Answer the user's question."
     response = llm.generate(f"User: {prompt}", system_prompt=system)
     return response.get("content", "").strip()
@@ -173,6 +169,15 @@ def main():
         print("🤖 [Baseline Chatbot]  (plain LLM – no tools)")
         baseline_ans = safe_call(run_baseline_chatbot, llm, tc["prompt"])
         print(f"   → {baseline_ans}\n")
+
+        # ── Skip sleep + Agent if out of scope ──────────────────────
+        if not is_flight_related(tc["prompt"]):
+            print("🚫 [ReAct Agent]  Guardrail triggered – skipping (0 tokens).")
+            print(f"   → {OUT_OF_SCOPE_MSG}\n")
+            if idx < len(TEST_CASES) - 1:
+                print(f"   ⏳  Sleeping {DELAY_BETWEEN_CASES}s before next test case …")
+                time.sleep(DELAY_BETWEEN_CASES)
+            continue
 
         # Pause between baseline and agent to stay under rate limit
         print(f"   ⏳  Sleeping {DELAY_BETWEEN_CALLS}s before Agent call …")
