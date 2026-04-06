@@ -43,12 +43,17 @@ class ReActAgent:
     # ------------------------------------------------------------------
     def get_system_prompt(self) -> str:
         """Build a detailed system prompt that defines the ReAct format and lists tools."""
+        import datetime
+        current_date = datetime.datetime.now().strftime('%Y-%m-%d')
+        
         tool_descriptions = "\n".join(
             [f"  - {t['name']}: {t['description']}" for t in self.tools]
         )
         tool_names = ", ".join([t["name"] for t in self.tools])
 
         return f"""You are an intelligent AI assistant specialised in flight booking.
+Today is {current_date}. Keep this in mind when the user asks for flights using relative terms like "today", "tomorrow", "this year", or provides dates without a year.
+
 You have access to the following tools:
 {tool_descriptions}
 
@@ -69,6 +74,10 @@ Rules:
 - NEVER fabricate an Observation or a PNR code. Wait for the tool result.
 - If a tool returns an error, explain it to the user in your Final Answer.
 - Always respond in the same language as the user.
+- STRICT SCOPE LIMITATION: You only answer questions related to flight searches, booking, baggage policies, and weather. 
+- If the user asks ANYTHING outside of this domain, immediately output:
+  Thought: The user is asking an out-of-scope question. I must refuse to save tokens.
+  Final Answer: Xin lỗi, tôi chỉ là trợ lý ảo hỗ trợ đặt vé máy bay. Tôi không được phân quyền để giải đáp các câu hỏi ngoài lề.
 """
 
     # ------------------------------------------------------------------
