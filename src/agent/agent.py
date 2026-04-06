@@ -4,6 +4,7 @@ import json
 from typing import List, Dict, Any, Optional
 from src.core.llm_provider import LLMProvider
 from src.telemetry.logger import logger
+from src.telemetry.metrics import tracker
 
 
 class ReActAgent:
@@ -12,10 +13,11 @@ class ReActAgent:
     Supports any LLMProvider (Gemini, OpenAI, Local).
     """
 
-    def __init__(self, llm: LLMProvider, tools: List[Dict[str, Any]], max_steps: int = 7):
+    def __init__(self, llm: LLMProvider, tools: List[Dict[str, Any]], max_steps: int = 7, version: str = "v2"):
         self.llm = llm
         self.tools = tools
         self.max_steps = max_steps
+        self.version = version
         self.history: List[str] = []
 
     # ------------------------------------------------------------------
@@ -31,6 +33,20 @@ class ReActAgent:
         )
         tool_names = ", ".join([t["name"] for t in self.tools])
 
+        if self.version == "v1":
+            return f"""You are a flight booking assistant.
+Today is {current_date}.
+
+Tools:
+{tool_descriptions}
+
+Format:
+Thought: <reasoning>
+Action: <tool_name>(args)
+Final Answer: <result>
+"""
+
+        # v2 (Improved) Prompt
         return f"""You are an intelligent AI assistant specialised in flight booking.
 Today is {current_date}. Keep this in mind when the user asks for flights using relative terms like "today", "tomorrow", "this year", or provides dates without a year.
 
@@ -63,9 +79,13 @@ Rules:
     # ------------------------------------------------------------------
     # Main ReAct Loop
     # ------------------------------------------------------------------
-    def run(self, user_input: str) -> str:
+    def run(self, user_input: str, context: Optional[Dict[str, Any]] = None) -> str:
         """Execute the Thought → Action → Observation loop until Final Answer or max_steps."""
-        logger.log_event("AGENT_START", {"input": user_input, "model": self.llm.model_name})
+        logger.log_event("AGENT_START", {
+            "input": user_input, 
+            "model": self.llm.model_name,
+            "version": self.version
+        })
 
         # Build a running transcript; append each LLM turn + Observation
         transcript = f"User: {user_input}\n"
@@ -84,6 +104,15 @@ Rules:
                 "usage": usage,
                 "latency_ms": latency,
             })
+
+            # Track request in telemetry metrics
+            tracker.track_request(
+                provider=response.get("provider", "unknown"),
+                model=self.llm.model_name,
+                usage=usage,
+                latency_ms=latency,
+                context=context,
+            )
 
             # Append LLM output to transcript
             transcript += f"\n{llm_text}\n"

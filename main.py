@@ -75,6 +75,12 @@ TEST_CASES: List[TestCase] = [
         prompt="Tôi chuẩn bị bay vào Sài Gòn, thời tiết ở đó ra sao?",
         expected_behavior="Dùng get_weather và chèn thông tin thời tiết hợp ngữ cảnh.",
     ),
+    TestCase(
+    case_id="TC6",
+    name="Out-of-domain adversarial query",
+        prompt="So sánh giúp tôi triết lý của chủ nghĩa khắc kỷ với Phật giáo, và cho lời khuyên về cách áp dụng vào cuộc sống hiện đại.",
+        expected_behavior="Nhận diện đây là câu hỏi ngoài domain (không liên quan đến flight/booking/weather/baggage)."
+    ),
 ]
 
 
@@ -84,8 +90,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--mode",
-        choices=["baseline", "agent", "both"],
-        default="both",
+        choices=["baseline", "agent_v1", "agent_v2", "all"],
+        default="agent_v2",
         help="Which runner(s) to execute.",
     )
     parser.add_argument(
@@ -342,6 +348,8 @@ def classify_agent_response(response: str) -> Tuple[str, Optional[str], Optional
         return "blocked", "agent_not_implemented", "src/agent/agent.py is still in skeleton state."
     if normalized.startswith("tool ") and normalized.endswith(" not found."):
         return "failure", "tool_not_found", response.strip()
+    if "agent could not complete the task within the maximum number of steps" in normalized:
+        return "failure", "max_steps_reached", "Agent timed out (max steps reached) without giving a Final Answer."
     return "success", None, None
 
 
@@ -351,14 +359,16 @@ def run_agent_case(
     case: TestCase,
     tools: List[Dict[str, Any]],
     tools_issue: Optional[str],
+    version: str = "v2",
 ) -> CaseOutcome:
-    log_case_start(run_id, "agent", case, provider)
+    runner_name = f"agent_{version}"
+    log_case_start(run_id, runner_name, case, provider)
 
     if tools_issue:
         return finalize_case(
             CaseOutcome(
                 run_id=run_id,
-                runner="agent",
+                runner=runner_name,
                 test_case_id=case.case_id,
                 test_name=case.name,
                 provider=provider_label(provider),
@@ -374,14 +384,20 @@ def run_agent_case(
 
     started_at = perf_counter()
     try:
-        agent = ReActAgent(llm=provider, tools=tools)
-        response = agent.run(case.prompt)
+        agent = ReActAgent(llm=provider, tools=tools, version=version)
+        context = {
+            "run_id": run_id,
+            "runner": runner_name,
+            "test_case_id": case.case_id,
+            "test_name": case.name,
+        }
+        response = agent.run(case.prompt, context=context)
         latency_ms = int((perf_counter() - started_at) * 1000)
         status, failure_type, notes = classify_agent_response(response)
         return finalize_case(
             CaseOutcome(
                 run_id=run_id,
-                runner="agent",
+                runner=runner_name,
                 test_case_id=case.case_id,
                 test_name=case.name,
                 provider=provider_label(provider),
@@ -396,11 +412,12 @@ def run_agent_case(
         )
     except Exception as exc:  # pragma: no cover - depends on agent/tool implementation
         latency_ms = int((perf_counter() - started_at) * 1000)
+        print(f"Error in {runner_name} case {case.case_id}: {exc}")
         logger.log_event(
             "CASE_ERROR",
             {
                 "run_id": run_id,
-                "runner": "agent",
+                "runner": runner_name,
                 "test_case_id": case.case_id,
                 "failure_type": type(exc).__name__,
                 "error": str(exc),
@@ -409,7 +426,7 @@ def run_agent_case(
         return finalize_case(
             CaseOutcome(
                 run_id=run_id,
-                runner="agent",
+                runner=runner_name,
                 test_case_id=case.case_id,
                 test_name=case.name,
                 provider=provider_label(provider),
@@ -489,7 +506,14 @@ def main() -> int:
 
     tools: List[Dict[str, Any]] = []
     tools_issue: Optional[str] = None
-    if args.mode in {"agent", "both"}:
+    
+    # Determine modes to run
+    modes_to_run = [args.mode]
+    if args.mode == "all":
+        modes_to_run = ["baseline", "agent_v1", "agent_v2"]
+
+    # Load tools if any agent mode is requested
+    if any(m.startswith("agent_") for m in modes_to_run):
         tools, tools_issue = load_tools(args.tools_module)
         if tools_issue:
             logger.log_event(
@@ -505,7 +529,7 @@ def main() -> int:
         "RUN_START",
         {
             "run_id": run_id,
-            "mode": args.mode,
+            "modes": modes_to_run,
             "provider": provider_name,
             "model": provider.model_name,
             "cases": [case.case_id for case in selected_cases],
@@ -513,13 +537,16 @@ def main() -> int:
     )
 
     outcomes: List[CaseOutcome] = []
-    if args.mode in {"baseline", "both"}:
-        for case in selected_cases:
-            outcomes.append(run_baseline_case(run_id, provider, case))
-
-    if args.mode in {"agent", "both"}:
-        for case in selected_cases:
-            outcomes.append(run_agent_case(run_id, provider, case, tools, tools_issue))
+    
+    for mode in modes_to_run:
+        print(f"\n>>> Running mode: {mode}")
+        if mode == "baseline":
+            for case in selected_cases:
+                outcomes.append(run_baseline_case(run_id, provider, case))
+        elif mode.startswith("agent_"):
+            version = mode.split("_")[1]
+            for case in selected_cases:
+                outcomes.append(run_agent_case(run_id, provider, case, tools, tools_issue, version=version))
 
     logger.log_event(
         "RUN_END",
