@@ -1,7 +1,11 @@
 # Group Report: Lab 3 - Production-Grade Agentic System
 
 - **Team Name**: C403-15
-- **Team Members**: Cao Diệu Ly
+- **Team Members**: 
+    - Nguyễn Trí Cao
+    - Lê Minh Tuấn
+    - Cao Diệu Ly
+    - Đậu Văn Nam
 - **Deployment Date**: 6/4/2026
 
 ---
