@@ -1,196 +1,550 @@
-"""
-main.py – Entry point for Lab 3: ReAct Agent Demo & Evaluation
-=============================================================
-Runs 5 test cases against:
-  1. Baseline Chatbot (plain LLM, no tools)
-  2. ReAct Agent      (Thought-Action-Observation loop with flight tools)
-
-Usage:
-    python main.py
-"""
-
+import argparse
+import importlib
 import os
 import sys
-import time
+from dataclasses import asdict, dataclass
+from time import perf_counter
+from typing import Any, Dict, List, Optional, Tuple
+from uuid import uuid4
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - dependency is listed in requirements.txt
+    load_dotenv = None
 
-from dotenv import load_dotenv
-load_dotenv()
-
-from src.core.gemini_provider import GeminiProvider
 from src.agent.agent import ReActAgent
-from src.tools.flight_tools import search_flights, book_flight, get_weather, get_baggage_policy, get_tool_definitions
+from src.core.llm_provider import LLMProvider
+from src.core.mock_provider import MockProvider
+from src.telemetry.log_analysis import format_summary, load_events, summarize_events, write_summary
+from src.telemetry.logger import logger
+from src.telemetry.metrics import tracker
 
-# ──────────────────────────────────────────────
-# Configuration
-# ──────────────────────────────────────────────
-GEMINI_MODEL = "gemini-2.5-flash"   # Free tier: 5 req/min → sleep added below
-DELAY_BETWEEN_CALLS = 15            # seconds – avoids rate-limit between baseline & agent
-DELAY_BETWEEN_CASES = 20            # seconds – avoids rate-limit between test cases
-MAX_RETRIES = 3                     # retry on 429 / quota errors
 
-# ──────────────────────────────────────────────
-# 5 Test Cases – grounded in mock_db.json
-# ──────────────────────────────────────────────
-#
-# DB snapshot (key data):
-#  HAN→SGN 2026-04-10: VN213($120,5 seats) | VJ122($75,0 seats) | QH501($95,7 seats)
-#  HAN→DAD 2026-04-11: VN345($150,3 seats) | VJ567($90,2 seats)
-#  HAN→PQC 2026-04-13: VN890($200,6 seats)
-#  SGN→HAN 2026-04-12: VN678($115,4 seats) | QH302($102,1 seat)
-#  Weather : SGN=Sunny32° | HAN=Rainy22° | DAD=Cloudy28° | PQC=Sunny34°
-#  Policies: VN=12kg carry-on+23kg check | VJ=7kg no check | QH=10kg+20kg
-TEST_CASES = [
-    {
-        "id": 1,
-        "label": "TC1 – Search flights (1 tool call)",
-        # Expected: Agent calls search_flights(HAN,SGN,2026-04-10)
-        # → returns VN213 $120, VJ122 $75 (hết chỗ), QH501 $95
-        "prompt": (
-            "Cho tôi xem danh sách chuyến bay từ Hà Nội (HAN) đến Sài Gòn (SGN) "
-            "vào ngày 2026-04-10."
-        ),
-    },
-    {
-        "id": 2,
-        "label": "TC2 – Book cheapest available (2 tool calls: search → book)",
-        # Expected:
-        #   Step1: search_flights(HAN,SGN,2026-04-10) → VJ122 hết chỗ nên bỏ qua
-        #   Step2: book_flight(QH501, "Le Thi C", "0911111111")  ← $95, còn 7 chỗ
-        #   → returns PNR code
-        "prompt": (
-            "Tìm chuyến bay rẻ nhất còn chỗ từ HAN đến SGN ngày 2026-04-10, "
-            "rồi đặt vé cho hành khách 'Le Thi C', liên hệ '0911111111'."
-        ),
-    },
-    {
-        "id": 3,
-        "label": "TC3 – Failure handling: book a sold-out flight",
-        # Expected: book_flight(VJ122, ...) → Error "no available seats"
-        # Agent should NOT hallucinate a PNR, must tell user flight is full.
-        "prompt": (
-            "Đặt vé chuyến VJ122 (Vietjet Air, HAN→SGN 10:30) "
-            "cho hành khách 'Pham Van D', liên hệ '0922222222'."
-        ),
-    },
-    {
-        "id": 4,
-        "label": "TC4 – Baggage policy lookup (1 tool call)",
-        # Expected: get_baggage_policy("Bamboo Airways")
-        # → "Hành lý xách tay 10 kg, ký gửi miễn phí 20 kg."
-        "prompt": (
-            "Tôi sắp bay Bamboo Airways. "
-            "Cho tôi biết quy định hành lý xách tay và ký gửi của hãng này."
-        ),
-    },
-    {
-        "id": 5,
-        "label": "TC5 – Weather + search combo (bonus: 2 tools)",
-        # Expected:
-        #   Step1: get_weather("DAD") → Cloudy 28°C
-        #   Step2: search_flights(HAN,DAD,2026-04-11) → VN345 & VJ567
-        #   Agent summarises weather AND available flights together.
-        "prompt": (
-            "Tôi muốn bay từ Hà Nội (HAN) đến Đà Nẵng (DAD) ngày 2026-04-11. "
-            "Thời tiết Đà Nẵng hôm đó thế nào và có những chuyến bay nào?"
-        ),
-    },
+@dataclass(frozen=True)
+class TestCase:
+    case_id: str
+    name: str
+    prompt: str
+    expected_behavior: str
+
+
+@dataclass
+class CaseOutcome:
+    run_id: str
+    runner: str
+    test_case_id: str
+    test_name: str
+    provider: str
+    model: str
+    status: str
+    latency_ms: int
+    response: str
+    expected_behavior: str
+    failure_type: Optional[str] = None
+    notes: Optional[str] = None
+
+
+TEST_CASES: List[TestCase] = [
+    TestCase(
+        case_id="TC1",
+        name="Flight search",
+        prompt="Bạn có tuyến bay nào từ Hà Nội đi Sài Gòn vào ngày 10/04/2026 không?",
+        expected_behavior="Trả đúng các chuyến bay khả dụng theo mock_db.json.",
+    ),
+    TestCase(
+        case_id="TC2",
+        name="Booking multi-step",
+        prompt="Tôi chọn chuyến bay VN213. Bạn hãy đặt vé giúp tôi cho hành khách 'Nguyen Van A' nhé.",
+        expected_behavior="Trích xuất mã chuyến bay, gọi book_flight và trả về PNR.",
+    ),
+    TestCase(
+        case_id="TC3",
+        name="Sold-out failure handling",
+        prompt="Đặt cho tôi chuyến VJ122.",
+        expected_behavior="Phát hiện hết chỗ và báo lại thay vì bịa PNR.",
+    ),
+    TestCase(
+        case_id="TC4",
+        name="Baggage policy lookup",
+        prompt="Bay của Vietnam Airlines được mang bao nhiêu kg hành lý?",
+        expected_behavior="Dùng get_baggage_policy để trả lời đúng theo JSON policy.",
+    ),
+    TestCase(
+        case_id="TC5",
+        name="Weather side-context",
+        prompt="Tôi chuẩn bị bay vào Sài Gòn, thời tiết ở đó ra sao?",
+        expected_behavior="Dùng get_weather và chèn thông tin thời tiết hợp ngữ cảnh.",
+    ),
 ]
 
 
-# ──────────────────────────────────────────────
-# Helpers
-# ──────────────────────────────────────────────
-SEP = "─" * 64
-
-def print_section(title: str) -> None:
-    print(f"\n{SEP}")
-    print(f"  {title}")
-    print(SEP)
-
-
-def safe_call(fn, *args, retries: int = MAX_RETRIES) -> str:
-    """
-    Call fn(*args) with automatic retry on rate-limit (429 / ResourceExhausted).
-    Returns error string if all retries exhausted.
-    """
-    for attempt in range(1, retries + 1):
-        try:
-            return fn(*args)
-        except Exception as e:
-            err_str = str(e)
-            # Detect quota / rate-limit errors
-            if "RESOURCE_EXHAUSTED" in err_str or "429" in err_str or "quota" in err_str.lower():
-                # Try to parse retry-after from the message
-                wait = 45  # default wait
-                import re
-                m = re.search(r"retry in (\d+)", err_str)
-                if m:
-                    wait = int(m.group(1)) + 5
-                print(f"\n   ⏳  Rate limit hit (attempt {attempt}/{retries}). Waiting {wait}s …")
-                time.sleep(wait)
-            else:
-                # Non-recoverable error
-                return f"[ERROR] {e}"
-    return "[ERROR] Max retries exceeded due to rate limiting."
-
-
-def run_baseline_chatbot(llm: GeminiProvider, prompt: str) -> str:
-    """Plain LLM call with NO tools – simulates a naive chatbot."""
-    system = "You are a helpful flight booking assistant. Answer the user's question."
-    response = llm.generate(f"User: {prompt}", system_prompt=system)
-    return response.get("content", "").strip()
-
-
-def run_react_agent(agent: ReActAgent, prompt: str) -> str:
-    return agent.run(prompt)
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run Lab 3 baseline/agent QA scenarios and summarize telemetry."
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["baseline", "agent", "both"],
+        default="both",
+        help="Which runner(s) to execute.",
+    )
+    parser.add_argument(
+        "--provider",
+        choices=["auto", "openai", "google", "gemini", "local", "mock"],
+        default="auto",
+        help="LLM provider to use. 'mock' is useful for smoke tests without API access.",
+    )
+    parser.add_argument("--model", default=None, help="Override the model name when supported.")
+    parser.add_argument(
+        "--cases",
+        default="all",
+        help="Comma-separated case IDs (e.g. TC1,TC3) or 'all'.",
+    )
+    parser.add_argument(
+        "--tools-module",
+        default="src.tools.flight_tools",
+        help="Python module that exposes agent tools.",
+    )
+    parser.add_argument(
+        "--analyze-only",
+        action="store_true",
+        help="Skip execution and only analyze an existing log file.",
+    )
+    parser.add_argument(
+        "--log-file",
+        default=None,
+        help="Log file to analyze. Defaults to today's log file.",
+    )
+    parser.add_argument(
+        "--run-id",
+        default=None,
+        help="Optional run_id filter. When omitted for execution, a new run_id is generated.",
+    )
+    return parser.parse_args()
 
 
-# ──────────────────────────────────────────────
-# Main
-# ──────────────────────────────────────────────
-def main():
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        print("❌  GEMINI_API_KEY not found in .env. Please set it and retry.")
-        sys.exit(1)
+def maybe_load_env():
+    if load_dotenv is not None:
+        load_dotenv()
 
-    llm   = GeminiProvider(model_name=GEMINI_MODEL, api_key=api_key)
-    agent = ReActAgent(llm=llm, tools=get_tool_definitions(), max_steps=7)
 
-    print(f"\n{'═'*64}")
-    print(f"  Lab 3 – ReAct Agent demo  |  Model: {GEMINI_MODEL}")
-    print(f"  ⚠  Free-tier: sleeping {DELAY_BETWEEN_CALLS}s between calls to avoid 429")
-    print(f"{'═'*64}")
+def _clean_env_value(value: Optional[str]) -> str:
+    if value is None:
+        return ""
+    return value.strip().strip("\"'").strip()
 
-    for idx, tc in enumerate(TEST_CASES):
-        print_section(f"Test Case {tc['id']}: {tc['label']}")
-        print(f"📝 Prompt: {tc['prompt']}\n")
 
-        # ── Baseline Chatbot ────────────────────────────────────────
-        print("🤖 [Baseline Chatbot]  (plain LLM – no tools)")
-        baseline_ans = safe_call(run_baseline_chatbot, llm, tc["prompt"])
-        print(f"   → {baseline_ans}\n")
+def _is_placeholder_secret(value: str) -> bool:
+    normalized = _clean_env_value(value).lower()
+    return normalized in {
+        "",
+        "your_openai_api_key_here",
+        "your_gemini_api_key_here",
+    }
 
-        # Pause between baseline and agent to stay under rate limit
-        print(f"   ⏳  Sleeping {DELAY_BETWEEN_CALLS}s before Agent call …")
-        time.sleep(DELAY_BETWEEN_CALLS)
 
-        # ── ReAct Agent ─────────────────────────────────────────────
-        print("🧠 [ReAct Agent]  (Thought → Action → Observation loop)")
-        agent_ans = safe_call(run_react_agent, agent, tc["prompt"])
-        print(f"   → {agent_ans}\n")
+def _infer_auto_provider(model_name: str) -> str:
+    normalized_model = model_name.lower()
+    openai_key = _clean_env_value(os.getenv("OPENAI_API_KEY"))
+    gemini_key = _clean_env_value(os.getenv("GEMINI_API_KEY"))
 
-        # Pause between test cases (skip after last one)
-        if idx < len(TEST_CASES) - 1:
-            print(f"   ⏳  Sleeping {DELAY_BETWEEN_CASES}s before next test case …")
-            time.sleep(DELAY_BETWEEN_CASES)
+    if normalized_model.startswith("gemini") and not _is_placeholder_secret(gemini_key):
+        return "gemini"
+    if normalized_model.startswith(("gpt", "o1", "o3", "o4")) and not _is_placeholder_secret(openai_key):
+        return "openai"
+    if not _is_placeholder_secret(gemini_key):
+        return "gemini"
+    if not _is_placeholder_secret(openai_key):
+        return "openai"
+    return "mock"
 
-    print(f"\n{'═'*64}")
-    print("  ✅  All test cases completed. Check logs/ for trace data.")
-    print(f"{'═'*64}\n")
+
+def resolve_provider(provider_name: str, model_name: Optional[str]) -> Tuple[LLMProvider, str]:
+    default_model = _clean_env_value(os.getenv("DEFAULT_MODEL")) or "gpt-4o"
+    selected_model = _clean_env_value(model_name) or default_model
+    selected = _clean_env_value(provider_name).lower()
+    default_provider = _clean_env_value(os.getenv("DEFAULT_PROVIDER")).lower()
+
+    if selected == "auto":
+        selected = default_provider or _infer_auto_provider(selected_model)
+
+    if selected == "openai" and selected_model.lower().startswith("gemini"):
+        selected = "gemini"
+    elif selected in {"google", "gemini"} and selected_model.lower().startswith(("gpt", "o1", "o3", "o4")):
+        selected = "openai"
+
+    if selected == "mock":
+        model = selected_model or "mock-baseline"
+        return MockProvider(model_name=model), selected
+
+    if selected == "openai":
+        api_key = _clean_env_value(os.getenv("OPENAI_API_KEY"))
+        if _is_placeholder_secret(api_key):
+            raise RuntimeError("OPENAI_API_KEY is missing. Use --provider mock for smoke tests.")
+        from src.core.openai_provider import OpenAIProvider
+
+        return OpenAIProvider(model_name=selected_model, api_key=api_key), selected
+
+    if selected in {"google", "gemini"}:
+        api_key = _clean_env_value(os.getenv("GEMINI_API_KEY"))
+        if _is_placeholder_secret(api_key):
+            raise RuntimeError("GEMINI_API_KEY is missing. Use --provider mock for smoke tests.")
+        from src.core.gemini_provider import GeminiProvider
+
+        return GeminiProvider(
+            model_name=selected_model,
+            api_key=api_key,
+        ), selected
+
+    if selected == "local":
+        model_path = os.getenv("LOCAL_MODEL_PATH", "./models/Phi-3-mini-4k-instruct-q4.gguf")
+        from src.core.local_provider import LocalProvider
+
+        return LocalProvider(model_path=model_path), selected
+
+    raise RuntimeError(f"Unsupported provider '{selected}'.")
+
+
+def load_tools(module_name: str) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    try:
+        module = importlib.import_module(module_name)
+    except ModuleNotFoundError as exc:
+        return [], f"Tools module '{module_name}' was not found: {exc}"
+    except Exception as exc:  # pragma: no cover - depends on user modules
+        return [], f"Tools module '{module_name}' failed to import: {exc}"
+
+    for factory_name in ("get_tools", "build_tools", "create_tools", "get_tool_definitions"):
+        factory = getattr(module, factory_name, None)
+        if callable(factory):
+            tools = factory()
+            if not isinstance(tools, list):
+                return [], f"{module_name}.{factory_name}() must return a list."
+            return tools, None
+
+    tools = getattr(module, "TOOLS", None)
+    if isinstance(tools, list):
+        return tools, None
+
+    return [], (
+        f"Tools module '{module_name}' does not expose get_tools(), build_tools(), "
+        "create_tools(), get_tool_definitions() or a TOOLS list."
+    )
+
+
+def select_cases(case_selector: str) -> List[TestCase]:
+    if case_selector.strip().lower() == "all":
+        return TEST_CASES
+
+    selected_ids = {part.strip().upper() for part in case_selector.split(",") if part.strip()}
+    matched = [case for case in TEST_CASES if case.case_id in selected_ids]
+    missing = selected_ids.difference({case.case_id for case in matched})
+    if missing:
+        raise RuntimeError(f"Unknown test case IDs: {', '.join(sorted(missing))}")
+    return matched
+
+
+def provider_label(provider: LLMProvider) -> str:
+    name = provider.__class__.__name__
+    if name.endswith("Provider"):
+        name = name[: -len("Provider")]
+    return name.lower()
+
+
+def log_case_start(run_id: str, runner: str, case: TestCase, provider: LLMProvider):
+    logger.log_event(
+        "CASE_START",
+        {
+            "run_id": run_id,
+            "runner": runner,
+            "test_case_id": case.case_id,
+            "test_name": case.name,
+            "provider": provider_label(provider),
+            "model": provider.model_name,
+            "prompt": case.prompt,
+        },
+    )
+
+
+def finalize_case(outcome: CaseOutcome) -> CaseOutcome:
+    logger.log_event("CASE_RESULT", asdict(outcome))
+    return outcome
+
+
+def run_baseline_case(run_id: str, provider: LLMProvider, case: TestCase) -> CaseOutcome:
+    log_case_start(run_id, "baseline", case, provider)
+
+    started_at = perf_counter()
+    try:
+        result = provider.generate(case.prompt)
+        latency_ms = int((perf_counter() - started_at) * 1000)
+        tracker.track_request(
+            provider=result.get("provider", provider_label(provider)),
+            model=provider.model_name,
+            usage=result.get("usage", {}),
+            latency_ms=result.get("latency_ms", latency_ms),
+            context={
+                "run_id": run_id,
+                "runner": "baseline",
+                "test_case_id": case.case_id,
+                "test_name": case.name,
+            },
+        )
+        return finalize_case(
+            CaseOutcome(
+                run_id=run_id,
+                runner="baseline",
+                test_case_id=case.case_id,
+                test_name=case.name,
+                provider=result.get("provider", provider_label(provider)),
+                model=provider.model_name,
+                status="success",
+                latency_ms=latency_ms,
+                response=result.get("content", ""),
+                expected_behavior=case.expected_behavior,
+                notes="Direct chatbot baseline run with no external tools.",
+            )
+        )
+    except Exception as exc:  # pragma: no cover - depends on runtime provider
+        latency_ms = int((perf_counter() - started_at) * 1000)
+        logger.log_event(
+            "CASE_ERROR",
+            {
+                "run_id": run_id,
+                "runner": "baseline",
+                "test_case_id": case.case_id,
+                "failure_type": type(exc).__name__,
+                "error": str(exc),
+            },
+        )
+        return finalize_case(
+            CaseOutcome(
+                run_id=run_id,
+                runner="baseline",
+                test_case_id=case.case_id,
+                test_name=case.name,
+                provider=provider_label(provider),
+                model=provider.model_name,
+                status="failure",
+                latency_ms=latency_ms,
+                response="",
+                expected_behavior=case.expected_behavior,
+                failure_type=type(exc).__name__,
+                notes=str(exc),
+            )
+        )
+
+
+def classify_agent_response(response: str) -> Tuple[str, Optional[str], Optional[str]]:
+    normalized = response.strip().lower()
+    if not normalized:
+        return "blocked", "empty_response", "Agent returned an empty response."
+    if "not implemented" in normalized or "fill in the todos" in normalized:
+        return "blocked", "agent_not_implemented", "src/agent/agent.py is still in skeleton state."
+    if normalized.startswith("tool ") and normalized.endswith(" not found."):
+        return "failure", "tool_not_found", response.strip()
+    return "success", None, None
+
+
+def run_agent_case(
+    run_id: str,
+    provider: LLMProvider,
+    case: TestCase,
+    tools: List[Dict[str, Any]],
+    tools_issue: Optional[str],
+) -> CaseOutcome:
+    log_case_start(run_id, "agent", case, provider)
+
+    if tools_issue:
+        return finalize_case(
+            CaseOutcome(
+                run_id=run_id,
+                runner="agent",
+                test_case_id=case.case_id,
+                test_name=case.name,
+                provider=provider_label(provider),
+                model=provider.model_name,
+                status="blocked",
+                latency_ms=0,
+                response="",
+                expected_behavior=case.expected_behavior,
+                failure_type="tools_unavailable",
+                notes=tools_issue,
+            )
+        )
+
+    started_at = perf_counter()
+    try:
+        agent = ReActAgent(llm=provider, tools=tools)
+        response = agent.run(case.prompt)
+        latency_ms = int((perf_counter() - started_at) * 1000)
+        status, failure_type, notes = classify_agent_response(response)
+        return finalize_case(
+            CaseOutcome(
+                run_id=run_id,
+                runner="agent",
+                test_case_id=case.case_id,
+                test_name=case.name,
+                provider=provider_label(provider),
+                model=provider.model_name,
+                status=status,
+                latency_ms=latency_ms,
+                response=response,
+                expected_behavior=case.expected_behavior,
+                failure_type=failure_type,
+                notes=notes,
+            )
+        )
+    except Exception as exc:  # pragma: no cover - depends on agent/tool implementation
+        latency_ms = int((perf_counter() - started_at) * 1000)
+        logger.log_event(
+            "CASE_ERROR",
+            {
+                "run_id": run_id,
+                "runner": "agent",
+                "test_case_id": case.case_id,
+                "failure_type": type(exc).__name__,
+                "error": str(exc),
+            },
+        )
+        return finalize_case(
+            CaseOutcome(
+                run_id=run_id,
+                runner="agent",
+                test_case_id=case.case_id,
+                test_name=case.name,
+                provider=provider_label(provider),
+                model=provider.model_name,
+                status="failure",
+                latency_ms=latency_ms,
+                response="",
+                expected_behavior=case.expected_behavior,
+                failure_type=type(exc).__name__,
+                notes=str(exc),
+            )
+        )
+
+
+def print_outcomes(outcomes: List[CaseOutcome]):
+    print("Case results:")
+    for outcome in outcomes:
+        detail = (
+            f"- {outcome.runner} / {outcome.test_case_id} ({outcome.test_name}) -> "
+            f"{outcome.status} in {outcome.latency_ms}ms"
+        )
+        if outcome.failure_type:
+            detail += f" [{outcome.failure_type}]"
+        print(detail)
+
+
+def build_summary(log_file: str, run_id: Optional[str]) -> Dict[str, Any]:
+    events = load_events(log_file)
+    summary = summarize_events(events, run_id=run_id)
+    summary["log_file"] = log_file
+    tracker_summary = tracker.summarize(run_id=run_id)
+    if tracker_summary["requests"] > 0:
+        summary["tracker"] = tracker_summary
+    return summary
+
+
+def analyze_existing_log(log_file: str, run_id: Optional[str]) -> int:
+    if not os.path.exists(log_file):
+        print(f"Log file not found: {log_file}")
+        return 1
+
+    summary = build_summary(log_file, run_id)
+    print(format_summary(summary))
+    return 0
+
+
+def main() -> int:
+    args = parse_args()
+    maybe_load_env()
+
+    if args.analyze_only:
+        log_file = args.log_file or logger.get_log_file()
+        return analyze_existing_log(log_file, args.run_id)
+
+    run_id = args.run_id or f"lab3-{uuid4().hex[:8]}"
+    tracker.reset_session()
+
+    try:
+        provider, provider_name = resolve_provider(args.provider, args.model)
+    except Exception as exc:
+        logger.log_event(
+            "RUN_BLOCKED",
+            {
+                "run_id": run_id,
+                "reason": str(exc),
+                "provider": args.provider,
+            },
+        )
+        print(str(exc))
+        return 1
+
+    try:
+        selected_cases = select_cases(args.cases)
+    except Exception as exc:
+        print(str(exc))
+        return 1
+
+    tools: List[Dict[str, Any]] = []
+    tools_issue: Optional[str] = None
+    if args.mode in {"agent", "both"}:
+        tools, tools_issue = load_tools(args.tools_module)
+        if tools_issue:
+            logger.log_event(
+                "TOOLS_BLOCKED",
+                {
+                    "run_id": run_id,
+                    "module": args.tools_module,
+                    "reason": tools_issue,
+                },
+            )
+
+    logger.log_event(
+        "RUN_START",
+        {
+            "run_id": run_id,
+            "mode": args.mode,
+            "provider": provider_name,
+            "model": provider.model_name,
+            "cases": [case.case_id for case in selected_cases],
+        },
+    )
+
+    outcomes: List[CaseOutcome] = []
+    if args.mode in {"baseline", "both"}:
+        for case in selected_cases:
+            outcomes.append(run_baseline_case(run_id, provider, case))
+
+    if args.mode in {"agent", "both"}:
+        for case in selected_cases:
+            outcomes.append(run_agent_case(run_id, provider, case, tools, tools_issue))
+
+    logger.log_event(
+        "RUN_END",
+        {
+            "run_id": run_id,
+            "total_cases": len(outcomes),
+            "statuses": {
+                "success": sum(1 for outcome in outcomes if outcome.status == "success"),
+                "failure": sum(1 for outcome in outcomes if outcome.status == "failure"),
+                "blocked": sum(1 for outcome in outcomes if outcome.status == "blocked"),
+            },
+        },
+    )
+
+    log_file = logger.get_log_file()
+    summary = build_summary(log_file, run_id)
+    summary_path = os.path.join("logs", f"summary-{run_id}.json")
+    write_summary(summary, summary_path)
+
+    print_outcomes(outcomes)
+    print("")
+    print(format_summary(summary))
+    print(f"Summary written to: {summary_path}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
