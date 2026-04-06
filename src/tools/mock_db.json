@@ -92,16 +92,46 @@
     }
   ],
   "weather": {
-    "SGN": {"condition": "Sunny", "temperature_c": 32},
-    "HAN": {"condition": "Cool and Cloudy", "temperature_c": 22},
-    "DAD": {"condition": "Windy", "temperature_c": 26},
-    "ICN": {"condition": "Cold", "temperature_c": 10},
-    "KUL": {"condition": "Thunderstorms", "temperature_c": 29},
-    "NRT": {"condition": "Clear", "temperature_c": 18},
-    "DXB": {"condition": "Hot", "temperature_c": 40},
-    "SIN": {"condition": "Rainy", "temperature_c": 27},
-    "BKK": {"condition": "Sunny and Humid", "temperature_c": 35},
-    "LHR": {"condition": "Foggy", "temperature_c": 12}
+    "SGN": {
+      "condition": "Sunny",
+      "temperature_c": 32
+    },
+    "HAN": {
+      "condition": "Cool and Cloudy",
+      "temperature_c": 22
+    },
+    "DAD": {
+      "condition": "Windy",
+      "temperature_c": 26
+    },
+    "ICN": {
+      "condition": "Cold",
+      "temperature_c": 10
+    },
+    "KUL": {
+      "condition": "Thunderstorms",
+      "temperature_c": 29
+    },
+    "NRT": {
+      "condition": "Clear",
+      "temperature_c": 18
+    },
+    "DXB": {
+      "condition": "Hot",
+      "temperature_c": 40
+    },
+    "SIN": {
+      "condition": "Rainy",
+      "temperature_c": 27
+    },
+    "BKK": {
+      "condition": "Sunny and Humid",
+      "temperature_c": 35
+    },
+    "LHR": {
+      "condition": "Foggy",
+      "temperature_c": 12
+    }
   },
   "policies": {
     "Vietnam Airlines": "Hành lý xách tay 12kg (1 kiện + 1 phụ kiện), ký gửi 23kg miễn phí.",
