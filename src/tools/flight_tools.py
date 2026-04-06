@@ -31,15 +31,19 @@ def _normalize_location(value: str) -> str:
     text = value.strip()
     aliases = {
         "ha noi": "HAN",
+        "hà nội": "HAN",
         "hanoi": "HAN",
         "hn": "HAN",
         "han": "HAN",
         "sai gon": "SGN",
+        "sài gòn": "SGN",
         "saigon": "SGN",
         "ho chi minh": "SGN",
+        "hồ chí minh": "SGN",
         "ho chi minh city": "SGN",
         "sgn": "SGN",
         "da nang": "DAD",
+        "đà nẵng": "DAD",
         "danang": "DAD",
         "dad": "DAD",
     }
