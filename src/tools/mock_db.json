@@ -1,0 +1,129 @@
+{
+  "flights": [
+    {
+      "flight_id": "VN213",
+      "airline": "Vietnam Airlines",
+      "origin": "HAN",
+      "destination": "SGN",
+      "departure_time": "2026-04-10T08:00:00",
+      "price_usd": 120,
+      "available_seats": 5
+    },
+    {
+      "flight_id": "VJ122",
+      "airline": "Vietjet Air",
+      "origin": "HAN",
+      "destination": "SGN",
+      "departure_time": "2026-04-10T10:30:00",
+      "price_usd": 75,
+      "available_seats": 0
+    },
+    {
+      "flight_id": "QH501",
+      "airline": "Bamboo Airways",
+      "origin": "HAN",
+      "destination": "SGN",
+      "departure_time": "2026-04-10T14:15:00",
+      "price_usd": 95,
+      "available_seats": 7
+    },
+    {
+      "flight_id": "VN345",
+      "airline": "Vietnam Airlines",
+      "origin": "HAN",
+      "destination": "DAD",
+      "departure_time": "2026-04-11T09:15:00",
+      "price_usd": 150,
+      "available_seats": 3
+    },
+    {
+      "flight_id": "VJ567",
+      "airline": "Vietjet Air",
+      "origin": "HAN",
+      "destination": "DAD",
+      "departure_time": "2026-04-11T13:45:00",
+      "price_usd": 90,
+      "available_seats": 2
+    },
+    {
+      "flight_id": "VN678",
+      "airline": "Vietnam Airlines",
+      "origin": "SGN",
+      "destination": "HAN",
+      "departure_time": "2026-04-12T07:20:00",
+      "price_usd": 115,
+      "available_seats": 4
+    },
+    {
+      "flight_id": "QH302",
+      "airline": "Bamboo Airways",
+      "origin": "SGN",
+      "destination": "HAN",
+      "departure_time": "2026-04-12T16:00:00",
+      "price_usd": 102,
+      "available_seats": 1
+    },
+    {
+      "flight_id": "VN890",
+      "airline": "Vietnam Airlines",
+      "origin": "HAN",
+      "destination": "PQC",
+      "departure_time": "2026-04-13T06:45:00",
+      "price_usd": 200,
+      "available_seats": 6
+    },
+    {
+      "flight_id": "VJ901",
+      "airline": "Vietjet Air",
+      "origin": "SGN",
+      "destination": "DAD",
+      "departure_time": "2026-04-14T11:00:00",
+      "price_usd": 60,
+      "available_seats": 0
+    },
+    {
+      "flight_id": "QH110",
+      "airline": "Bamboo Airways",
+      "origin": "DAD",
+      "destination": "SGN",
+      "departure_time": "2026-04-15T15:30:00",
+      "price_usd": 80,
+      "available_seats": 9
+    }
+  ],
+  "weather": {
+    "SGN": {
+      "condition": "Sunny",
+      "temperature_c": 32
+    },
+    "HAN": {
+      "condition": "Rainy",
+      "temperature_c": 22
+    },
+    "DAD": {
+      "condition": "Cloudy",
+      "temperature_c": 28
+    },
+    "PQC": {
+      "condition": "Sunny",
+      "temperature_c": 34
+    },
+    "HPH": {
+      "condition": "Foggy",
+      "temperature_c": 20
+    }
+  },
+  "policies": {
+    "Vietnam Airlines": "Hành lý xách tay 12 kg, ký gửi miễn phí 23 kg. Oversize phí 30 USD/kg.",
+    "Vietjet Air": "Hành lý xách tay 7 kg, ký gửi không bao gồm (mua thêm từ 15 USD/kg).",
+    "Bamboo Airways": "Hành lý xách tay 10 kg, ký gửi miễn phí 20 kg.",
+    "Pacific Airlines": "Hành lý xách tay 7 kg, ký gửi mua thêm từ 12 USD/kg."
+  },
+  "bookings": {
+    "IUFHGE": {
+      "flight_id": "QH501",
+      "passenger_name": "Nguyen Van A",
+      "contact_info": "0901234567"
+    }
+  }
+}
