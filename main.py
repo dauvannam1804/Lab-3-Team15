@@ -3,6 +3,7 @@ import importlib
 import os
 import sys
 <<<<<<< HEAD
+<<<<<<< HEAD
 import re
 import time
 =======
@@ -11,12 +12,20 @@ from time import perf_counter
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 >>>>>>> 6a63230f4bdc83f001bfe87a1d4e68ff3e416de9
+=======
+import re
+import time
+
+# Make sure src/ is importable when running from the project root
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+>>>>>>> f802a557054a2e097ec44a6ff883d60c0ba2994c
 
 try:
     from dotenv import load_dotenv
 except ImportError:  # pragma: no cover - dependency is listed in requirements.txt
     load_dotenv = None
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 from dotenv import load_dotenv
 load_dotenv()
@@ -32,9 +41,24 @@ from src.telemetry.log_analysis import format_summary, load_events, summarize_ev
 from src.telemetry.logger import logger
 from src.telemetry.metrics import tracker
 >>>>>>> 6a63230f4bdc83f001bfe87a1d4e68ff3e416de9
+=======
+from src.core.gemini_provider import GeminiProvider
+from src.agent.agent import ReActAgent, _FLIGHT_KEYWORDS
+from src.tools.flight_tools import FLIGHT_TOOLS
+>>>>>>> f802a557054a2e097ec44a6ff883d60c0ba2994c
 
+# ──────────────────────────────────────────────
+# Configuration
+# ──────────────────────────────────────────────
+GEMINI_MODEL = "gemini-2.5-flash"   # Free tier: 5 req/min → sleep added below
+DELAY_BETWEEN_CALLS = 15            # seconds – avoids rate-limit between baseline & agent
+DELAY_BETWEEN_CASES = 20            # seconds – avoids rate-limit between test cases
+MAX_RETRIES = 3                     # retry on 429 / quota errors
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> f802a557054a2e097ec44a6ff883d60c0ba2994c
 # ──────────────────────────────────────────────
 # Test Cases
 # ──────────────────────────────────────────────
@@ -82,6 +106,7 @@ TEST_CASES = [
         # Baseline: generic answer, may be wrong.
         "prompt": "Bay Bamboo Airways được mang bao nhiêu kg hành lý xách tay và ký gửi?",
     },
+<<<<<<< HEAD
 =======
 @dataclass(frozen=True)
 class TestCase:
@@ -139,60 +164,52 @@ TEST_CASES: List[TestCase] = [
         expected_behavior="Dùng get_weather và chèn thông tin thời tiết hợp ngữ cảnh.",
     ),
 >>>>>>> 6a63230f4bdc83f001bfe87a1d4e68ff3e416de9
+=======
+>>>>>>> f802a557054a2e097ec44a6ff883d60c0ba2994c
 ]
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Run Lab 3 baseline/agent QA scenarios and summarize telemetry."
-    )
-    parser.add_argument(
-        "--mode",
-        choices=["baseline", "agent", "both"],
-        default="both",
-        help="Which runner(s) to execute.",
-    )
-    parser.add_argument(
-        "--provider",
-        choices=["auto", "openai", "google", "gemini", "local", "mock"],
-        default="auto",
-        help="LLM provider to use. 'mock' is useful for smoke tests without API access.",
-    )
-    parser.add_argument("--model", default=None, help="Override the model name when supported.")
-    parser.add_argument(
-        "--cases",
-        default="all",
-        help="Comma-separated case IDs (e.g. TC1,TC3) or 'all'.",
-    )
-    parser.add_argument(
-        "--tools-module",
-        default="src.tools.flight_tools",
-        help="Python module that exposes agent tools.",
-    )
-    parser.add_argument(
-        "--analyze-only",
-        action="store_true",
-        help="Skip execution and only analyze an existing log file.",
-    )
-    parser.add_argument(
-        "--log-file",
-        default=None,
-        help="Log file to analyze. Defaults to today's log file.",
-    )
-    parser.add_argument(
-        "--run-id",
-        default=None,
-        help="Optional run_id filter. When omitted for execution, a new run_id is generated.",
-    )
-    return parser.parse_args()
+# ──────────────────────────────────────────────
+# Helpers
+# ──────────────────────────────────────────────
+SEP = "─" * 64
+
+def print_section(title: str) -> None:
+    print(f"\n{SEP}")
+    print(f"  {title}")
+    print(SEP)
 
 
-def maybe_load_env():
-    if load_dotenv is not None:
-        load_dotenv()
+def safe_call(fn, *args, retries: int = MAX_RETRIES) -> str:
+    """
+    Call fn(*args) with automatic retry on rate-limit (429 / ResourceExhausted).
+    Returns error string if all retries exhausted.
+    """
+    for attempt in range(1, retries + 1):
+        try:
+            return fn(*args)
+        except Exception as e:
+            err_str = str(e)
+            # Detect quota / rate-limit errors
+            if "RESOURCE_EXHAUSTED" in err_str or "429" in err_str or "quota" in err_str.lower():
+                # Try to parse retry-after from the message
+                wait = 45  # default wait
+                import re
+                m = re.search(r"retry in (\d+)", err_str)
+                if m:
+                    wait = int(m.group(1)) + 5
+                print(f"\n   ⏳  Rate limit hit (attempt {attempt}/{retries}). Waiting {wait}s …")
+                time.sleep(wait)
+            else:
+                # Non-recoverable error
+                return f"[ERROR] {e}"
+    return "[ERROR] Max retries exceeded due to rate limiting."
 
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> f802a557054a2e097ec44a6ff883d60c0ba2994c
 # ──────────────────────────────────────────────
 # Guardrail helper (shared with agent.py)
 # ──────────────────────────────────────────────
@@ -218,40 +235,42 @@ def run_baseline_chatbot(llm: GeminiProvider, prompt: str) -> str:
     system = "You are a helpful flight booking assistant. Answer the user's question."
     response = llm.generate(f"User: {prompt}", system_prompt=system)
     return response.get("content", "").strip()
+<<<<<<< HEAD
 =======
 def _clean_env_value(value: Optional[str]) -> str:
     if value is None:
         return ""
     return value.strip().strip("\"'").strip()
 >>>>>>> 6a63230f4bdc83f001bfe87a1d4e68ff3e416de9
+=======
+>>>>>>> f802a557054a2e097ec44a6ff883d60c0ba2994c
 
 
-def _is_placeholder_secret(value: str) -> bool:
-    normalized = _clean_env_value(value).lower()
-    return normalized in {
-        "",
-        "your_openai_api_key_here",
-        "your_gemini_api_key_here",
-    }
+def run_react_agent(agent: ReActAgent, prompt: str) -> str:
+    return agent.run(prompt)
 
 
-def _infer_auto_provider(model_name: str) -> str:
-    normalized_model = model_name.lower()
-    openai_key = _clean_env_value(os.getenv("OPENAI_API_KEY"))
-    gemini_key = _clean_env_value(os.getenv("GEMINI_API_KEY"))
+# ──────────────────────────────────────────────
+# Main
+# ──────────────────────────────────────────────
+def main():
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        print("❌  GEMINI_API_KEY not found in .env. Please set it and retry.")
+        sys.exit(1)
 
-    if normalized_model.startswith("gemini") and not _is_placeholder_secret(gemini_key):
-        return "gemini"
-    if normalized_model.startswith(("gpt", "o1", "o3", "o4")) and not _is_placeholder_secret(openai_key):
-        return "openai"
-    if not _is_placeholder_secret(gemini_key):
-        return "gemini"
-    if not _is_placeholder_secret(openai_key):
-        return "openai"
-    return "mock"
+    llm   = GeminiProvider(model_name=GEMINI_MODEL, api_key=api_key)
+    agent = ReActAgent(llm=llm, tools=FLIGHT_TOOLS, max_steps=7)
 
+    print(f"\n{'═'*64}")
+    print(f"  Lab 3 – ReAct Agent demo  |  Model: {GEMINI_MODEL}")
+    print(f"  ⚠  Free-tier: sleeping {DELAY_BETWEEN_CALLS}s between calls to avoid 429")
+    print(f"{'═'*64}")
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> f802a557054a2e097ec44a6ff883d60c0ba2994c
     latency_report = []   # collect rows for summary table
 
     for idx, tc in enumerate(TEST_CASES):
@@ -315,6 +334,7 @@ def _infer_auto_provider(model_name: str) -> str:
     print(f"{'═'*64}")
     print("  ✅  Done. Check logs/ for full trace data.")
     print(f"{'═'*64}\n")
+<<<<<<< HEAD
 =======
 def resolve_provider(provider_name: str, model_name: Optional[str]) -> Tuple[LLMProvider, str]:
     default_model = _clean_env_value(os.getenv("DEFAULT_MODEL")) or "gpt-4o"
@@ -702,6 +722,8 @@ def main() -> int:
     print(f"Summary written to: {summary_path}")
     return 0
 >>>>>>> 6a63230f4bdc83f001bfe87a1d4e68ff3e416de9
+=======
+>>>>>>> f802a557054a2e097ec44a6ff883d60c0ba2994c
 
 
 if __name__ == "__main__":
