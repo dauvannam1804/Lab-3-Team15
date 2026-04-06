@@ -19,7 +19,6 @@
       "available_seats": 0
     },
     {
-<<<<<<< HEAD
       "flight_id": "QH304",
       "airline": "Bamboo Airways",
       "origin": "DAD",
@@ -88,16 +87,7 @@
       "origin": "DXB",
       "destination": "SGN",
       "departure_time": "2026-05-01T09:30:00",
-      "price_usd": 800,
-=======
-      "flight_id": "QH245",
-      "airline": "Bamboo Airways",
-      "origin": "HAN",
-      "destination": "DAD",
-      "departure_time": "2026-04-10T09:15:00",
-      "price_usd": 95,
->>>>>>> origin/develop_cao
-      "available_seats": 3
+      "price_usd": 800,      "available_seats": 3
     }
   ],
   "weather": {
@@ -106,7 +96,6 @@
       "temperature_c": 32
     },
     "HAN": {
-<<<<<<< HEAD
       "condition": "Cool and Cloudy",
       "temperature_c": 22
     },
@@ -157,19 +146,3 @@
   },
   "bookings": {}
 }
-=======
-      "condition": "Rainy",
-      "temperature_c": 22
-    },
-    "DAD": {
-      "condition": "Cloudy",
-      "temperature_c": 28
-    }
-  },
-  "policies": {
-    "Vietnam Airlines": "Hành lý xách tay 12kg, ký gửi 23kg.",
-    "Vietjet Air": "Hành lý xách tay 7kg, không bao gồm ký gửi.",
-    "Bamboo Airways": "Hành lý xách tay 7kg, ký gửi 20kg."
-  }
-}
->>>>>>> origin/develop_cao
