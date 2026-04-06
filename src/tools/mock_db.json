@@ -19,76 +19,75 @@
       "available_seats": 0
     },
     {
-      "flight_id": "QH501",
+      "flight_id": "QH304",
       "airline": "Bamboo Airways",
-      "origin": "HAN",
-      "destination": "SGN",
-      "departure_time": "2026-04-10T14:15:00",
-      "price_usd": 95,
-      "available_seats": 5
-    },
-    {
-      "flight_id": "VN345",
-      "airline": "Vietnam Airlines",
-      "origin": "HAN",
-      "destination": "DAD",
-      "departure_time": "2026-04-11T09:15:00",
-      "price_usd": 150,
-      "available_seats": 3
-    },
-    {
-      "flight_id": "VJ567",
-      "airline": "Vietjet Air",
-      "origin": "HAN",
-      "destination": "DAD",
-      "departure_time": "2026-04-11T13:45:00",
+      "origin": "DAD",
+      "destination": "HAN",
+      "departure_time": "2026-04-12T14:15:00",
       "price_usd": 90,
+      "available_seats": 12
+    },
+    {
+      "flight_id": "VN614",
+      "airline": "Vietnam Airlines",
+      "origin": "SGN",
+      "destination": "HAN",
+      "departure_time": "2026-04-10T15:00:00",
+      "price_usd": 130,
+      "available_seats": 8
+    },
+    {
+      "flight_id": "VJ155",
+      "airline": "Vietjet Air",
+      "origin": "SGN",
+      "destination": "DAD",
+      "departure_time": "2026-04-11T09:00:00",
+      "price_usd": 65,
       "available_seats": 2
     },
     {
-      "flight_id": "VN678",
-      "airline": "Vietnam Airlines",
-      "origin": "SGN",
-      "destination": "HAN",
-      "departure_time": "2026-04-12T07:20:00",
-      "price_usd": 115,
-      "available_seats": 4
-    },
-    {
-      "flight_id": "QH302",
-      "airline": "Bamboo Airways",
-      "origin": "SGN",
-      "destination": "HAN",
-      "departure_time": "2026-04-12T16:00:00",
-      "price_usd": 102,
-      "available_seats": 1
-    },
-    {
-      "flight_id": "VN890",
+      "flight_id": "VN408",
       "airline": "Vietnam Airlines",
       "origin": "HAN",
-      "destination": "PQC",
-      "departure_time": "2026-04-13T06:45:00",
-      "price_usd": 200,
-      "available_seats": 6
+      "destination": "ICN",
+      "departure_time": "2026-04-15T23:30:00",
+      "price_usd": 350,
+      "available_seats": 50
     },
     {
-      "flight_id": "VJ901",
+      "flight_id": "VJ822",
       "airline": "Vietjet Air",
       "origin": "SGN",
-      "destination": "DAD",
-      "departure_time": "2026-04-14T11:00:00",
-      "price_usd": 60,
+      "destination": "KUL",
+      "departure_time": "2026-04-13T12:00:00",
+      "price_usd": 110,
       "available_seats": 0
     },
     {
-      "flight_id": "QH110",
+      "flight_id": "QH502",
       "airline": "Bamboo Airways",
-      "origin": "DAD",
+      "origin": "HAN",
+      "destination": "NRT",
+      "departure_time": "2026-04-20T00:15:00",
+      "price_usd": 420,
+      "available_seats": 15
+    },
+    {
+      "flight_id": "JL751",
+      "airline": "Japan Airlines",
+      "origin": "NRT",
+      "destination": "HAN",
+      "departure_time": "2026-04-25T18:00:00",
+      "price_usd": 550,
+      "available_seats": 5
+    },
+    {
+      "flight_id": "EK392",
+      "airline": "Emirates",
+      "origin": "DXB",
       "destination": "SGN",
-      "departure_time": "2026-04-15T15:30:00",
-      "price_usd": 80,
-      "available_seats": 9
+      "departure_time": "2026-05-01T09:30:00",
+      "price_usd": 800,      "available_seats": 3
     }
   ],
   "weather": {
@@ -97,43 +96,53 @@
       "temperature_c": 32
     },
     "HAN": {
-      "condition": "Rainy",
+      "condition": "Cool and Cloudy",
       "temperature_c": 22
     },
     "DAD": {
-      "condition": "Cloudy",
-      "temperature_c": 28
+      "condition": "Windy",
+      "temperature_c": 26
     },
-    "PQC": {
-      "condition": "Sunny",
-      "temperature_c": 34
+    "ICN": {
+      "condition": "Cold",
+      "temperature_c": 10
     },
-    "HPH": {
+    "KUL": {
+      "condition": "Thunderstorms",
+      "temperature_c": 29
+    },
+    "NRT": {
+      "condition": "Clear",
+      "temperature_c": 18
+    },
+    "DXB": {
+      "condition": "Hot",
+      "temperature_c": 40
+    },
+    "SIN": {
+      "condition": "Rainy",
+      "temperature_c": 27
+    },
+    "BKK": {
+      "condition": "Sunny and Humid",
+      "temperature_c": 35
+    },
+    "LHR": {
       "condition": "Foggy",
-      "temperature_c": 20
+      "temperature_c": 12
     }
   },
   "policies": {
-    "Vietnam Airlines": "Hành lý xách tay 12 kg, ký gửi miễn phí 23 kg. Oversize phí 30 USD/kg.",
-    "Vietjet Air": "Hành lý xách tay 7 kg, ký gửi không bao gồm (mua thêm từ 15 USD/kg).",
-    "Bamboo Airways": "Hành lý xách tay 10 kg, ký gửi miễn phí 20 kg.",
-    "Pacific Airlines": "Hành lý xách tay 7 kg, ký gửi mua thêm từ 12 USD/kg."
+    "Vietnam Airlines": "Hành lý xách tay 12kg (1 kiện + 1 phụ kiện), ký gửi 23kg miễn phí.",
+    "Vietjet Air": "Hành lý xách tay 7kg, không bao gồm ký gửi (cần mua thêm gói Eco).",
+    "Bamboo Airways": "Hành lý xách tay 7kg, miễn phí 20kg ký gửi cho hạng phổ thông.",
+    "Japan Airlines": "Hành lý xách tay 10kg, miễn phí 2 kiện ký gửi mỗi kiện 23kg.",
+    "Emirates": "Hành lý xách tay 7kg, miễn phí 30kg ký gửi (tùy vào zone).",
+    "Singapore Airlines": "Hành lý xách tay 7kg, miễn phí 25kg hoặc 30kg ký gửi tùy hạng.",
+    "Qatar Airways": "Hành lý xách tay 7kg (phổ thông), miễn phí 25kg ký gửi.",
+    "AirAsia": "Hành lý xách tay tối đa 7kg, toàn bộ ký gửi phải mua thêm.",
+    "Korean Air": "Hành lý xách tay 10kg, ký gửi 1 kiện 23kg.",
+    "Cathay Pacific": "Hành lý xách tay 7kg, miễn phí 1 kiện ký gửi 23kg."
   },
-  "bookings": {
-    "IUFHGE": {
-      "flight_id": "QH501",
-      "passenger_name": "Nguyen Van A",
-      "contact_info": "0901234567"
-    },
-    "9I5SGJ": {
-      "flight_id": "QH501",
-      "passenger_name": "Le Thi C",
-      "contact_info": "0911111111"
-    },
-    "83U0W4": {
-      "flight_id": "QH501",
-      "passenger_name": "Tran Thi B",
-      "contact_info": "0977777777"
-    }
-  }
+  "bookings": {}
 }

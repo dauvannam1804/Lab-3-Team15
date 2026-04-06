@@ -1,14 +1,5 @@
-"""
-main.py – Entry point for Lab 3: ReAct Agent Demo & Evaluation
-=============================================================
-Runs 5 test cases against:
-  1. Baseline Chatbot (plain LLM, no tools)
-  2. ReAct Agent      (Thought-Action-Observation loop with flight tools)
-
-Usage:
-    python main.py
-"""
-
+import argparse
+import importlib
 import os
 import sys
 import re
@@ -17,8 +8,10 @@ import time
 # Make sure src/ is importable when running from the project root
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from dotenv import load_dotenv
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - dependency is listed in requirements.txt
+    load_dotenv = None
 
 from src.core.gemini_provider import GeminiProvider
 from src.agent.agent import ReActAgent, _FLIGHT_KEYWORDS
@@ -233,4 +226,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
