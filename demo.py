@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 # Try to load env
 load_dotenv()
 
-from src.core.gemini_provider import GeminiProvider
+from src.core.openai_provider import OpenAIProvider
 from src.agent.agent import ReActAgent
 from src.tools.flight_tools import get_tools
 import src.telemetry.logger as logger_module
@@ -36,11 +36,17 @@ class MemoryLogger:
     def clear(self):
         self.events = []
 
+import src.agent.agent as agent_module
+
 if not hasattr(st.session_state, 'mem_logger'):
     st.session_state.mem_logger = MemoryLogger(logger_module.logger)
     logger_module.logger = st.session_state.mem_logger
+    agent_module.logger = st.session_state.mem_logger
 
 mem_logger = st.session_state.mem_logger
+# Make sure patch holds on rerun
+agent_module.logger = mem_logger
+logger_module.logger = mem_logger
 
 # -------------------------------------------------------------------------------------
 # Streamlit UI Config
@@ -133,12 +139,12 @@ def run_agent(agent, prompt):
 # App Body
 # -------------------------------------------------------------------------------------
 
-api_key = os.getenv("GEMINI_API_KEY")
-if not api_key:
-    st.error("🔑 Vui lòng thiết lập biến môi trường GEMINI_API_KEY trong file .env")
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key or api_key == "your_openai_api_key_here":
+    st.error("🔑 Vui lòng thiết lập biến môi trường OPENAI_API_KEY trong file .env")
     st.stop()
     
-llm = GeminiProvider(model_name="gemini-2.5-flash", api_key=api_key)
+llm = OpenAIProvider(model_name="gpt-4o", api_key=api_key)
 tools = get_tools()
 
 if "chat_history" not in st.session_state:
